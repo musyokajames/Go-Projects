@@ -1,0 +1,18 @@
+# Create a binary file with various types of data
+with open('binary_input.bin', 'wb') as f:
+    # Write some simple byte data
+    f.write(bytes([0x01, 0x02, 0x03, 0x04, 0x05]))
+
+    # Write 32-bit integers
+    f.write((100).to_bytes(4, byteorder='little'))
+    f.write((200).to_bytes(4, byteorder='little'))
+    f.write((300).to_bytes(4, byteorder='little'))
+    f.write((400).to_bytes(4, byteorder='little'))
+
+    # Write string data
+    f.write(b'Hello, Go!')
+
+    # Write floating-point data
+    import struct
+    f.write(struct.pack('f', 3.14))  # Write float 3.14
+    f.write(struct.pack('f', 2.71))  # Write float 2.71
