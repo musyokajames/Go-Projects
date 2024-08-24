@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blog Posts</title>
+</head>
+<body>
+    <h1>All Blog Posts</h1>
+    <ul>
+        {{range .}}
+        <li>
+            <a href="/post/{{.ID}}">{{.Title}}</a>
+            <form action="/delete/{{.ID}}" method="post" style="display: inline;">
+                <br>
+                <button type="submit">Delete</button>
+            </form>
+        </li>
+        {{else}}
+        <li>No posts available.</li>
+        {{end}}
+    </ul>
+
+    <a href="/new/">Create New Post</a>
+</body>
+</html>
