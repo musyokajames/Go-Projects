@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 	"text/template"
 	"time"
 
@@ -18,12 +17,22 @@ import (
 
 func userRegistration(w http.ResponseWriter, r *http.Request) {
 	// connecting to my database
-	datasourcename := "Musyoka:mysqlpassword@tcp(127.0.0.1:3306)/users_db"
-	db, err := sql.Open("mysql", datasourcename)
+	dsn := "Musyoka:mysqlpassword@tcp(127.0.0.1:3306)/users_db"
+	db, err := sql.Open("mysql", dsn)
 	if err != nil {
+		log.Println("Error connecting to database:", err)
 		http.Error(w, "Error connecting to database", http.StatusInternalServerError)
+		return
 	}
 	defer db.Close()
+
+	err = db.Ping()
+	if err != nil {
+		log.Println("Database connection failed:", err)
+		http.Error(w, "Database connection failed", http.StatusInternalServerError)
+		return
+	}
+	log.Println("Succesfully connected to the database")
 
 	// link the html form with my code
 	if r.Method == http.MethodGet {
@@ -31,8 +40,13 @@ func userRegistration(w http.ResponseWriter, r *http.Request) {
 		tmpl.Execute(w, nil)
 
 	} else if r.Method == http.MethodPost {
+		err := r.ParseForm()
 
-		r.ParseForm()
+		if err != nil {
+			http.Error(w, "Error parsing form", http.StatusBadRequest)
+			return
+		}
+
 		name := r.FormValue("name")
 		username := r.FormValue("username")
 		password := r.FormValue("password")
@@ -42,18 +56,25 @@ func userRegistration(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Println("Error generating hash password:", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-
+			return
 		}
 
 		// now insert these values to the database
 		query := "INSERT INTO users(name ,username, password_hash) VALUES (?, ?, ?)"
-		_, err = db.Exec(query, name, username, hashedPassword)
+		result, err := db.Exec(query, name, username, hashedPassword)
 		if err != nil {
-			log.Println("Error writing to SQL database", err)
+			log.Println("Error writing to SQL database:", err)
 			http.Error(w, "Error writing to SQL database", http.StatusInternalServerError)
 			return
 		}
-		fmt.Println("Data inserted successfully")
+
+		// Check how many rows were affected
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			log.Println("Error getting affected rows:", err)
+		} else {
+			log.Printf("Data inserted successfully, %d row(s) affected", rowsAffected)
+		}
 
 	}
 
@@ -103,7 +124,7 @@ func userLogin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		fmt.Println("Login Successfull")
+		fmt.Println("Login Successful")
 
 		// If Login is successful create a JWT token
 		claims := jwt.MapClaims{
@@ -122,8 +143,23 @@ func userLogin(w http.ResponseWriter, r *http.Request) {
 		}
 
 		//Sending the token to the client
-		w.Header().Set("Authorization", "Bearer "+tokenString)
-		fmt.Fprintf(w, "Login successful, token: %s", tokenString)
+		//w.Header().Set("Authorization", "Bearer "+tokenString)
+		//fmt.Fprintf(w, "Login successful, token: %s", tokenString)
+
+		//Set the token in a secure HTTP-only cookie
+		http.SetCookie(w, &http.Cookie{
+			Name:     "token",
+			Value:    tokenString,
+			HttpOnly: true,
+			Secure:   true, // Set to true if using HTTPS
+			SameSite: http.SameSiteStrictMode,
+			Path:     "/",
+			MaxAge:   3600 * 24, // 24 hours
+		})
+
+		// Redirect to the tasks view page
+		http.Redirect(w, r, "/view", http.StatusSeeOther)
+		return
 
 	}
 }
@@ -132,13 +168,23 @@ func userLogin(w http.ResponseWriter, r *http.Request) {
 
 func authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, "Missing token", http.StatusUnauthorized)
+		// authHeader := r.Header.Get("Authorization")
+		// if authHeader == "" {
+		// 	http.Error(w, "Missing token", http.StatusUnauthorized)
+		// 	return
+
+		cookie, err := r.Cookie("token")
+		if err != nil {
+			if err == http.ErrNoCookie {
+				http.Error(w, "Missing token", http.StatusUnauthorized)
+				return
+			}
+			http.Error(w, "Bad Request", http.StatusBadRequest)
 			return
 		}
 
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		tokenString := cookie.Value
+		//tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
 		//Parse the token
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
