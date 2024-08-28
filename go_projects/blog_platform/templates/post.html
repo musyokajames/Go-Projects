@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{.Title}}</title>
+</head>
+<body>
+    <h1>{{.Title}}</h1>
+    <p>{{.Content}}</p>
+    <br>
+    <img src="./likeicon.jpeg" width="40px" alt="like icon" onclick="addLikes()" >
+    <p>Likes: <span id="likeCount">0</span></p>
+    <br>
+    <label>Write a comment:</label><br>
+    <textarea name="comments" rows="3" cols="50"></textarea>
+    <form action="/append" method="post">
+        <button type="submit">Submit</button>
+    </form>
+    <br>
+    <br>
+    <!-- {{.Comments}} -->
+    <a href="/view"><p>Go back to main page</p></a><br>
+    <script>
+        let likeCount=0
+        function addLikes(){
+            likeCount++
+            document.getElementById("likeCount").innerText = likeCount
+
+        }
+    </script>
+</body>
+</html>

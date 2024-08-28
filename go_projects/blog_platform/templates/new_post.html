@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Post</title>
+
+    <style>
+        textarea {
+            width: 500px;
+            height: 200px;
+            resize: both; /* Allows resizing both horizontally and vertically */
+        }
+    </style>
+</head>
+<body>
+    <h1>Add new post here</h1>
+    <form action="/add" method="post">
+        <label>Blog Title:</label><br>
+        <input type="text" name="title">
+        <br>
+        <br>
+        <label>Blog content:</label>
+        <br>
+        <textarea name="content" ></textarea>
+        <br>
+        <button type="submit">Submit</button>
+    </form>
+</body>
+</html>

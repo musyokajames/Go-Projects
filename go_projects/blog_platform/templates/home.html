@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home Page</title>
+</head>
+<body>
+    <h1>All Blog Posts</h1>
+    <ul>
+        {{range .}}
+        <li>
+            <a href="/view/{{.ID}}" style="text-decoration: none;">{{.Title}}</a>
+        </li>
+        {{else}}
+        <li>No Posts Available.</li>
+        {{end}}
+    </ul>
+
+    <p><a href="/new">Add New Post</a></p>
+</body>
+</html>
