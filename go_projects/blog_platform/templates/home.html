@@ -6,9 +6,10 @@
     <title>Home Page</title>
 </head>
 <body>
+    <header><p>Logged in as <i>{{.Username}}</i></p></header>
     <h1>All Blog Posts</h1>
     <ul>
-        {{range .}}
+        {{range .Posts}}
         <li>
             <a href="/view/{{.ID}}" style="text-decoration: none;">{{.Title}}</a>
         </li>
@@ -17,6 +18,6 @@
         {{end}}
     </ul>
 
-    <p><a href="/new">Add New Post</a></p>
+    <p><a href="/add">Add New Post</a></p>
 </body>
 </html>

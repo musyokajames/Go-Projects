@@ -11,18 +11,22 @@
             height: 200px;
             resize: both; /* Allows resizing both horizontally and vertically */
         }
+        input{
+            width: 450px;
+        }
     </style>
 </head>
 <body>
     <h1>Add new post here</h1>
     <form action="/add" method="post">
-        <label>Blog Title:</label><br>
+        <label required>Blog Title:</label><br>
         <input type="text" name="title">
         <br>
         <br>
         <label>Blog content:</label>
         <br>
         <textarea name="content" ></textarea>
+        <br>
         <br>
         <button type="submit">Submit</button>
     </form>

@@ -165,7 +165,7 @@ func userLogin(w http.ResponseWriter, r *http.Request) {
 		// If login is succesful create a JWT token
 		claims := jwt.MapClaims{
 			"username": username,
-			"exp":      time.Now().Add(24 * time.Hour).Unix(),
+			"exp":      time.Now().Add(12 * time.Hour).Unix(),
 		}
 
 		// Generating the token
@@ -229,9 +229,8 @@ type Post struct {
 	ID      int    `json:"id"`
 	Title   string `json:"title"`
 	Content string `json:"content"`
+	Author  string `json:"username"`
 }
-
-var posts []Post
 
 func viewBlog(w http.ResponseWriter, r *http.Request) {
 	// connect to the database
@@ -243,8 +242,36 @@ func viewBlog(w http.ResponseWriter, r *http.Request) {
 	}
 	defer db.Close()
 
-	// retrieve the files from the database
+	//Retrieve the JWT token from the cookie
+	cookie, err := r.Cookie("token")
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
 
+	//Define a struct to hold the JWT claims
+	type Claims struct {
+		Username string `json:"username"`
+		Exp      int64  `json:"exp"`
+		jwt.RegisteredClaims
+	}
+
+	//Parse the token and extract the username
+	claims := &Claims{}
+
+	token, err := jwt.ParseWithClaims(cookie.Value, claims, func(token *jwt.Token) (interface{}, error) {
+		return jwtSecret, nil
+	})
+	if err != nil || !token.Valid {
+		http.Error(w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	username := claims.Username
+
+	var posts []Post
+
+	// retrieve the files from the database
 	query := "SELECT id, title FROM posts"
 	rows, err := db.Query(query)
 	if err != nil {
@@ -261,20 +288,36 @@ func viewBlog(w http.ResponseWriter, r *http.Request) {
 		}
 		posts = append(posts, post)
 	}
+
+	if len(posts) == 0 {
+		log.Println("No posts found")
+		http.Error(w, "No posts available", http.StatusNotFound)
+		return
+	}
+
+	//Prepare the data to pass to the template
+	type TemplateData struct {
+		Username string
+		Posts    []Post
+	}
+	data := TemplateData{
+		Username: username,
+		Posts:    posts,
+	}
+
+	//Execute the template
 	tmpl := template.Must(template.ParseFiles("templates/home.html"))
-	tmpl.Execute(w, posts)
+	tmpl.Execute(w, data)
 }
 
 func viewPost(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
-	idStr := params["id"]
-
-	if idStr == "" {
+	idStr, exists := params["id"]
+	if !exists || idStr == "" {
 		log.Println("Error: ID parameter is missing")
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
-
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		log.Println("Error converting to integer:", err)
@@ -291,31 +334,236 @@ func viewPost(w http.ResponseWriter, r *http.Request) {
 	}
 	defer db.Close()
 
-	type Post struct {
-		Title   string
-		Content string
-	}
-
 	// query the database
-	query := "SELECT title, content FROM posts WHERE id = ?"
 	var post Post
-	err = db.QueryRow(query, id).Scan(&post.Title, &post.Content)
+	query := "SELECT title, content, author_username FROM posts WHERE id = ?"
+	err = db.QueryRow(query, id).Scan(&post.Title, &post.Content, &post.Author)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Post not found", http.StatusNotFound)
 		} else {
 			log.Println("Error querying database:", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
 		}
+		return
+	}
+	type Comment struct {
+		ID        int
+		PostID    int
+		Author    string
+		Content   string
+		CreatedAt time.Time
+	}
+
+	var comments []Comment
+	query = "SELECT author, content, created_at FROM comments WHERE post_id = ?"
+	rows, err := db.Query(query, id)
+	if err != nil {
+		log.Println("Error querying comments:", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var comment Comment
+		if err := rows.Scan(&comment.Author, &comment.Content, &comment.CreatedAt); err != nil {
+			log.Println("Error scanning comment:", err)
+			continue
+		}
+		comments = append(comments, comment)
+	}
+
+	data := struct {
+		Post     Post
+		Comments []Comment
+	}{
+		Post:     post,
+		Comments: comments,
 	}
 
 	// Render the template
-	tmpl := template.Must(template.ParseFiles("templates/post.html"))
-	err = tmpl.Execute(w, post)
+	tmpl, err := template.ParseFiles("templates/post.html")
+	if err != nil {
+		log.Println("Error parsing template:", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	err = tmpl.Execute(w, data)
 	if err != nil {
 		log.Println("Error executing template:", err)
+	}
+}
+
+func addComments(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	cookie, err := r.Cookie("token")
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	type Claims struct {
+		Username string `json:"username"`
+		jwt.RegisteredClaims
+	}
+
+	claims := &Claims{}
+
+	token, err := jwt.ParseWithClaims(cookie.Value, claims, func(token *jwt.Token) (interface{}, error) {
+		return jwtSecret, nil
+	})
+	if err != nil || !token.Valid {
+		http.Error(w, "Invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	username := claims.Username
+
+	if err := r.ParseForm(); err != nil {
+		log.Println("Error parsing form:", err)
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	log.Println("Form Values:", r.Form)
+
+	postID := r.FormValue("post_id")
+	author := username
+	content := r.FormValue("content")
+
+	if postID == "" || author == "" || content == "" {
+		http.Error(w, "All fields are required", http.StatusBadRequest)
+		return
+	}
+
+	postIDInt, err := strconv.Atoi(postID)
+	if err != nil {
+		log.Println("Error converting post_id to integer:", err)
+		http.Error(w, "Invalid post ID", http.StatusBadRequest)
+		return
+	}
+
+	// connect to the database
+	db, err := sql.Open("mysql", "Musyoka:mysqlpassword@tcp(127.0.0.1:3306)/blogPlatformDB")
+	if err != nil {
+		log.Println("Error connecting to database:", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+
+	var postExists bool
+	err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM posts WHERE id = ?)", postID).Scan(&postExists)
+	if err != nil {
+		log.Println("Error checking post existence:", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	if !postExists {
+		http.Error(w, "Post not found", http.StatusBadRequest)
+		return
+	}
+
+	query := "INSERT INTO comments(post_id, author, content) VALUES(?, ?, ?)"
+	results, err := db.Exec(query, postIDInt, author, content)
+	if err != nil {
+		log.Println("Error inserting comment:", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	affectedRows, err := results.RowsAffected()
+	if err != nil {
+		log.Println("Error getting affected rows:", err)
+	} else {
+		log.Printf("Inserted comment. Affected rows: %d", affectedRows)
+	}
+
+	http.Redirect(w, r, fmt.Sprintf("/view/%s", postID), http.StatusSeeOther)
+
+}
+
+func createPost(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		tmpl := template.Must(template.ParseFiles("templates/new_post.html"))
+		tmpl.Execute(w, nil)
+
+	} else if r.Method == http.MethodPost {
+		db, err := sql.Open("mysql", "Musyoka:mysqlpassword@tcp(127.0.0.1:3306)/blogPlatformDB")
+		if err != nil {
+			log.Println("Error connecting to database:", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+		defer db.Close()
+
+		cookie, err := r.Cookie("token")
+		if err != nil {
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		type Claims struct {
+			Username string `json:"username"`
+			jwt.RegisteredClaims
+		}
+
+		claims := &Claims{}
+
+		token, err := jwt.ParseWithClaims(cookie.Value, claims, func(token *jwt.Token) (interface{}, error) {
+			return jwtSecret, nil
+		})
+		if err != nil || !token.Valid {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+
+		username := claims.Username
+
+		r.ParseForm()
+
+		title := r.FormValue("title")
+		content := r.FormValue("content")
+		author := username
+
+		// Check if any field is empty
+		if title == "" || content == "" {
+			log.Println("Error: All fields are required")
+			http.Error(w, "All fields are required", http.StatusBadRequest)
+			return
+		}
+
+		query := "INSERT INTO posts(title, content, author_username) VALUES (?, ?, ?)"
+		results, err := db.Exec(query, title, content, author)
+		if err != nil {
+			log.Println("Error inserting to database:", err)
+			return
+		}
+
+		//Check how many rows in the database were affected
+		rowsAffected, err := results.RowsAffected()
+		if err != nil {
+			log.Println("Error getting affected rows:", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		}
+
+		log.Printf("Data inserted succesfully, %d rows affected", rowsAffected)
+
+		var existingUsername string
+		err = db.QueryRow("SELECT username FROM users WHERE username = ?", author).Scan(&existingUsername)
+		if err != nil {
+			log.Println("Username does not exist", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		http.Redirect(w, r, "/view", http.StatusSeeOther)
 	}
 }
 
@@ -325,8 +573,10 @@ func main() {
 	r.HandleFunc("/register", userRegistration).Methods("GET", "POST")
 	r.HandleFunc("/login", userLogin).Methods("GET", "POST")
 
-	r.Handle("/view", authMiddleware(http.HandlerFunc(viewBlog))).Methods("GET", "POST")
-	r.Handle("/view/{ID}", authMiddleware(http.HandlerFunc(viewPost))).Methods("GET", "POST")
+	r.Handle("/view", authMiddleware(http.HandlerFunc(viewBlog))).Methods("GET")
+	r.Handle("/view/{id:[0-9]+}", authMiddleware(http.HandlerFunc(viewPost))).Methods("GET", "POST")
+	r.Handle("/comment", authMiddleware(http.HandlerFunc(addComments))).Methods("POST")
+	r.Handle("/add", authMiddleware(http.HandlerFunc(createPost))).Methods("GET", "POST")
 	fmt.Println("Server starting on port 9000...")
 	log.Fatal(http.ListenAndServe(":9000", r))
 }
