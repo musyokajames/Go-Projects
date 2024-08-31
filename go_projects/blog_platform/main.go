@@ -567,6 +567,7 @@ func createPost(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// I should add a delete function here as soon as i figure out what happens to my "id"
 func main() {
 	r := mux.NewRouter()
 

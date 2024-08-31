@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Store</title>
+</head>
+<body>
+    <h1>Our Products</h1>
+    <form action="/add" method="post">
+        <button>Go to cart</button>
+    </form>
+    <form action="/search" method="post">
+        <input type="text" placeholder="Search by product name..." name="productName">
+        <input type="text" placeholder="Search by category name..." name="categoryName">
+        <button type="submit">Search</button>
+    </form>
+    
+    <hr>
+    <div>
+        {{range .}}
+        <h4>{{.Name}}</h4>
+        <img src="/images/{{.Image}}" alt="{{.Image}}"/>
+        <br>
+        <span>{{.Category.CategoryName}}</span>
+        <p>Price:{{.Price}}</p>
+        <p>In Stock: {{.Quantity}}</p>
+        <button type="submit">Add to cart</button>
+        <hr>
+        {{else}}
+        <p>No products available</p>
+        {{end}}       
+    </div>
+</body>
+</html>

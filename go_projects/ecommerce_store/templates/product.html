@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Product</title>
+</head>
+<body>
+    <h1>Our Products</h1>
+    <form method="post" action="/view">
+         <button type="submit">Home Page</button>
+    </form> 
+    <a href="/cart.html"><button>Go to cart</button></a> 
+    <hr>
+    <div>
+        {{range .}}
+        <h4>{{.Name}}</h4>
+        <img src="/images/{{.Image}}" alt="{{.Image}}"/>
+        <br>
+        <span>{{.Category.CategoryName}}</span>
+        <p>Price:{{.Price}}</p>
+        <p>In Stock: {{.Quantity}}</p>
+        <button type="submit">Add to cart</button>
+        <hr>
+        {{else}}
+        <p>No products available</p>
+        {{end}}       
+    </div>
+</body>
+</html>
